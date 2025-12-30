@@ -1,0 +1,223 @@
+package com.onlinestore.shopping_carts_service.service;
+
+import com.onlinestore.shopping_carts_service.dto.ProductDTO;
+import com.onlinestore.shopping_carts_service.dto.ShoppingCartDTO;
+import com.onlinestore.shopping_carts_service.dto.UserDTO;
+import com.onlinestore.shopping_carts_service.feign.IProductAPI;
+import com.onlinestore.shopping_carts_service.feign.IUserAPI;
+import com.onlinestore.shopping_carts_service.model.ShoppingCart;
+import com.onlinestore.shopping_carts_service.repository.IShoppingCartRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class ShoppingCartService implements IShoppingCartService {
+
+    @Autowired
+    private IShoppingCartRepository iShoppingCartRepository;
+
+    @Autowired
+    private IProductAPI iProductAPI;
+
+    @Autowired
+    private IUserAPI iUserAPI;
+
+    @Override
+    public String createShoppingCart(ShoppingCartDTO shoppingCartDTO) {
+
+        //save entity
+        ShoppingCart shoppingCart = this.convertDtoToShoppingCartEntity(shoppingCartDTO);
+
+        //set single price and name to the list of products inside the "shoppingCart"
+        shoppingCart = this.setSinglePriceAndNameToProducts(shoppingCart);
+
+        //actualize the total price
+        shoppingCart = this.actualizeTotalPrice(shoppingCart);
+
+        //save the entity
+        iShoppingCartRepository.save(shoppingCart);
+
+        //setting the id of the shopping cart to the user asigned in the DTO
+        this.setThisShoppingCartToUser(shoppingCart);
+
+        return "The shopping cart has been created";
+    }
+
+    //circuit breaker
+    private void setThisShoppingCartToUser(ShoppingCart shoppingCart) {
+
+        UserDTO userDTO = iUserAPI.findByUserId( shoppingCart.getId_user() );
+        //the user will have a list of shopping cart IDs, they may already have IDs loaded or not
+        //I'm adding this one I just created to their list.
+        userDTO.getIds_shopping_cart().add(shoppingCart.getId_shopping_cart());
+        //update
+        iUserAPI.updateUser(userDTO);
+    }
+
+    private List<Long> getProductCodesFromShoppingCart(ShoppingCart shoppingCart) {
+
+        List<ProductDTO> products = shoppingCart.getProducts();
+        List<Long> product_codes = new ArrayList<>();
+
+        for(ProductDTO pr : products){
+            product_codes.add(pr.getCode());
+        }
+        return product_codes;
+    }
+
+    //circuit breaker
+    private ShoppingCart setSinglePriceAndNameToProducts(ShoppingCart shoppingCart) {
+
+        //search for products using the codes received in the DTO
+        List<Long> product_codes = this.getProductCodesFromShoppingCart(shoppingCart);
+        List<ProductDTO> productsFromAPI = iProductAPI.findProductsByCodes(product_codes);
+
+        //I grab the entity's product list
+        List<ProductDTO> listToReturn = shoppingCart.getProducts();
+
+        if( listToReturn == null && productsFromAPI == null ) {
+            return null;
+        }
+
+        //the "single_price" and "name" attributes are empty in the ShoppingCart(Entity) product list.
+        //so I'm iterating and setting these attributes.
+        for (ProductDTO product : listToReturn) {
+
+            for (ProductDTO productFromAPI : productsFromAPI) {
+
+                if (productFromAPI.getCode().equals(product.getCode())) {
+                    product.setSingle_price(productFromAPI.getSingle_price());
+                    product.setName(productFromAPI.getName());
+                }
+            }
+        }
+        //set the list with all attributes complete
+        shoppingCart.setProducts(listToReturn);
+        return shoppingCart;
+    }
+
+    @Override
+    public String deleteProductFromShoppingCart(Long code_product, Long shopping_cart_id) {
+
+        ShoppingCart shoppingCart = iShoppingCartRepository.findById(shopping_cart_id).orElse(null);
+
+        if( shoppingCart == null ) {
+            return "The shopping cart does not exist";
+        }
+
+        List<ProductDTO> products = shoppingCart.getProducts();
+        if( products == null ) {
+            return "The shopping cart does not have any products";
+        }
+
+        for(ProductDTO product : products) {
+
+                if( product.getCode().equals(code_product) ) {
+
+                    //remove the product from the list
+                    products.remove(product);
+                    shoppingCart.setProducts(products);
+
+                    //actualize the total price
+                    shoppingCart = this.actualizeTotalPrice(shoppingCart);
+
+                    //save
+                    iShoppingCartRepository.save(shoppingCart);
+                    return "The product from the shopping cart has been deleted";
+                }
+                return "That product does not exist in the shopping cart";
+        }
+        return "The product code was not found in the product list";
+    }
+
+    //circuit breaker
+    @Override
+    public String addProductToShoppingCart(ProductDTO productDTO, Long shopping_cart_id) {
+
+        //I'm looking for the shopping cart and the product to add
+        ShoppingCart shoppingCart = iShoppingCartRepository.findById(shopping_cart_id).orElse(null);
+
+        ProductDTO productFound = iProductAPI.findProductByCode(productDTO.getCode());
+
+
+        if( shoppingCart != null && productFound != null ) {
+
+            //the productDTO will already have the ID and quantity
+            //it's missing the individual price and name, so I'm setting these attributes
+            productDTO.setSingle_price(productFound.getSingle_price());
+            productDTO.setName(productFound.getName());
+
+            //add
+            shoppingCart.getProducts().add(productDTO);
+
+            //actualize the total price of the products
+            shoppingCart = this.actualizeTotalPrice(shoppingCart);
+
+            //save
+            iShoppingCartRepository.save(shoppingCart);
+            return "The product was saved successfully";
+        }
+        return "The shopping cart does not exist, the id it's wrong or the product does not exist";
+    }
+
+    private ShoppingCart actualizeTotalPrice(ShoppingCart shoppingCart) {
+
+        List<ProductDTO> products =  shoppingCart.getProducts();
+        BigDecimal totalPrice = BigDecimal.ZERO;
+
+        if(products == null) {
+            return null;
+        }
+
+        for(ProductDTO product : products) {
+                //I take the quantity of the current product
+                BigDecimal quantity = BigDecimal.valueOf( product.getQuantity());
+                //I multiply the "single price" with the "quantity" and the result add it to the "totalPrice"
+                totalPrice = totalPrice.add( product.getSingle_price().multiply(quantity) );
+        }
+
+        shoppingCart.setTotal_price(totalPrice);
+        return shoppingCart;
+    }
+
+    @Override
+    public ShoppingCartDTO findById(Long id_shopping_cart) {
+        ShoppingCart shoppingCart = iShoppingCartRepository.findById(id_shopping_cart).orElse(null);
+        if(shoppingCart != null) {
+            return convertEntityToDTO(shoppingCart);
+        }
+        return null;
+    }
+
+    private ShoppingCartDTO convertEntityToDTO(ShoppingCart shoppingCart) {
+        ShoppingCartDTO dto = new ShoppingCartDTO();
+        dto.setId_shopping_cart(shoppingCart.getId_shopping_cart());
+        dto.setId_user(shoppingCart.getId_user());
+        dto.setTotal_price(shoppingCart.getTotal_price());
+        dto.setProducts(shoppingCart.getProducts());
+        return dto;
+    }
+
+    @Override
+    public List<Long> findAllShopingCartIds() {
+        List<ShoppingCart> list = iShoppingCartRepository.findAll();
+        List<Long> shoppingCartIds = new ArrayList<>();
+
+        for(ShoppingCart sc : list){
+            shoppingCartIds.add( sc.getId_shopping_cart() );
+        }
+        return shoppingCartIds;
+    }
+
+    private ShoppingCart convertDtoToShoppingCartEntity(ShoppingCartDTO shoppingCartDTO) {
+        ShoppingCart shoppingCart = new ShoppingCart();
+        shoppingCart.setId_user(shoppingCartDTO.getId_user());
+        shoppingCart.setTotal_price(shoppingCartDTO.getTotal_price());
+        shoppingCart.setProducts(shoppingCartDTO.getProducts());
+        return shoppingCart;
+    }
+}
