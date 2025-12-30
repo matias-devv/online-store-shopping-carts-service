@@ -17,8 +17,9 @@ public class ShoppingCartDTO {
 
     private Long id_shopping_cart;
     private Long id_user;
-    private BigDecimal total_price;
-
     private List<ProductDTO> products;
+
+    //this attribute is only used to send through GET requests
+    private BigDecimal total_price;
 
 }

@@ -7,6 +7,10 @@ import com.onlinestore.shopping_carts_service.feign.IProductAPI;
 import com.onlinestore.shopping_carts_service.feign.IUserAPI;
 import com.onlinestore.shopping_carts_service.model.ShoppingCart;
 import com.onlinestore.shopping_carts_service.repository.IShoppingCartRepository;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.FetchType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -47,16 +51,18 @@ public class ShoppingCartService implements IShoppingCartService {
         return "The shopping cart has been created";
     }
 
-    //circuit breaker
     private void setThisShoppingCartToUser(ShoppingCart shoppingCart) {
 
         UserDTO userDTO = iUserAPI.findByUserId( shoppingCart.getId_user() );
-        //the user will have a list of shopping cart IDs, they may already have IDs loaded or not
-        //I'm adding this one I just created to their list.
-        userDTO.getIds_shopping_cart().add(shoppingCart.getId_shopping_cart());
-        //update
-        iUserAPI.updateUser(userDTO);
+        if( userDTO != null ) {
+            //the user will have a list of shopping cart IDs, they may already have IDs loaded or not
+            //I'm adding this one I just created to their list.
+            userDTO.getIds_shopping_cart().add(shoppingCart.getId_shopping_cart());
+            //update
+            iUserAPI.updateUser(userDTO);
+        }
     }
+
 
     private List<Long> getProductCodesFromShoppingCart(ShoppingCart shoppingCart) {
 
@@ -69,7 +75,8 @@ public class ShoppingCartService implements IShoppingCartService {
         return product_codes;
     }
 
-    //circuit breaker
+    @CircuitBreaker(name="products-service", fallbackMethod = "fallbackSetSinglePriceAndNameToProducts")
+    @Retry(name="products-service")
     private ShoppingCart setSinglePriceAndNameToProducts(ShoppingCart shoppingCart) {
 
         //search for products using the codes received in the DTO
@@ -98,6 +105,11 @@ public class ShoppingCartService implements IShoppingCartService {
         //set the list with all attributes complete
         shoppingCart.setProducts(listToReturn);
         return shoppingCart;
+    }
+
+    public ShoppingCart fallbackSetSinglePriceAndNameToProducts(Throwable throwable){
+        return new ShoppingCart( 9999999L, 999999L,
+                                 BigDecimal.ZERO, null);
     }
 
     @Override
@@ -134,8 +146,9 @@ public class ShoppingCartService implements IShoppingCartService {
         return "The product code was not found in the product list";
     }
 
-    //circuit breaker
     @Override
+    @CircuitBreaker(name="products-service", fallbackMethod = "fallbackAddProductToShoppingCart")
+    @Retry(name="products-service")
     public String addProductToShoppingCart(ProductDTO productDTO, Long shopping_cart_id) {
 
         //I'm looking for the shopping cart and the product to add
@@ -162,6 +175,10 @@ public class ShoppingCartService implements IShoppingCartService {
             return "The product was saved successfully";
         }
         return "The shopping cart does not exist, the id it's wrong or the product does not exist";
+    }
+
+    public String fallbackAddProductToShoppingCart(Throwable throwable) {
+        return "The microservice: product-service it's temporarily closed";
     }
 
     private ShoppingCart actualizeTotalPrice(ShoppingCart shoppingCart) {
