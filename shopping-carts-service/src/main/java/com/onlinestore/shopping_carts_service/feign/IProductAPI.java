@@ -15,7 +15,7 @@ public interface IProductAPI {
     @GetMapping("/product/find/{code}")
     public ProductDTO findProductByCode(@PathVariable Long code);
 
-    @GetMapping("/find")
+    @GetMapping("/product/find")
     public List<ProductDTO> findProductsByCodes(@RequestBody List<Long> codes);
 
 

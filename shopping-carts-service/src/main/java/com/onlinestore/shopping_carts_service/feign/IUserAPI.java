@@ -14,7 +14,7 @@ public interface IUserAPI {
     @GetMapping("/user/find/{id}")
     public UserDTO findByUserId(@PathVariable Long id);
     //update
-    @PutMapping("/update")
+    @PutMapping("/user/update")
     public String updateUser(@RequestBody UserDTO userDTO);
 
 }

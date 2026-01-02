@@ -9,11 +9,10 @@ import com.onlinestore.shopping_carts_service.model.ShoppingCart;
 import com.onlinestore.shopping_carts_service.repository.IShoppingCartRepository;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
-import jakarta.persistence.ElementCollection;
-import jakarta.persistence.FetchType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import javax.naming.ServiceUnavailableException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +50,8 @@ public class ShoppingCartService implements IShoppingCartService {
         return "The shopping cart has been created";
     }
 
+    @CircuitBreaker(name ="users-service", fallbackMethod = "fallbackSetThisShoppingCartToUser")
+    @Retry(name = "users-service")
     private void setThisShoppingCartToUser(ShoppingCart shoppingCart) {
 
         UserDTO userDTO = iUserAPI.findByUserId( shoppingCart.getId_user() );
@@ -63,6 +64,9 @@ public class ShoppingCartService implements IShoppingCartService {
         }
     }
 
+    public void fallbackSetThisShoppingCartToUser(Throwable throwable) throws ServiceUnavailableException {
+        throw new ServiceUnavailableException("the microservice: users-service is temporarily closed, method: setThisShoppingCartToUser");
+    }
 
     private List<Long> getProductCodesFromShoppingCart(ShoppingCart shoppingCart) {
 
@@ -108,8 +112,7 @@ public class ShoppingCartService implements IShoppingCartService {
     }
 
     public ShoppingCart fallbackSetSinglePriceAndNameToProducts(Throwable throwable){
-        return new ShoppingCart( 9999999L, 999999L,
-                                 BigDecimal.ZERO, null);
+        return new ShoppingCart( 9999999L, 999999L, null, null);
     }
 
     @Override
