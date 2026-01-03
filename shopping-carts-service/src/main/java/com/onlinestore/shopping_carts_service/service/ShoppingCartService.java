@@ -165,37 +165,81 @@ public class ShoppingCartService implements IShoppingCartService {
     @Override
     @CircuitBreaker(name="products-service", fallbackMethod = "fallbackAddProductToShoppingCart")
     @Retry(name="products-service")
-    public String addProductToShoppingCart(ProductDTO productDTO, Long shopping_cart_id) {
-
+    public String addProductToShoppingCart(ProductDTO productReceived, Long shopping_cart_id) {
 
         //I'm looking for the shopping cart and the product to add
         ShoppingCart shoppingCart = iShoppingCartRepository.findById(shopping_cart_id).orElse(null);
 
-        //Get the list of products of this shopping cart
+        ProductDTO productFound = iProductAPI.findProductByCode( productReceived.getCode() );
+
+        boolean flag = this.isThisProductInTheShoppingCart( productReceived, shoppingCart);
+
+        if( shoppingCart == null || productFound == null ) {
+            return "The shopping cart does not exist, the id it's wrong or the product does not exist";
+        }
+        if(flag){
+            return this.ifProductIsInTheShoppingCart(productReceived, shoppingCart);
+        }
+        return this.ifProductIsNotInTheShoppingCart(productReceived, productFound, shoppingCart);
+    }
+
+
+    private String ifProductIsNotInTheShoppingCart(ProductDTO productReceived, ProductDTO productFound, ShoppingCart shoppingCart) {
+
         List<ProductDTO> products = shoppingCart.getProducts();
 
-        //The product to add
-        ProductDTO productFound = iProductAPI.findProductByCode( productDTO.getCode() );
+        productReceived.setSingle_price(productFound.getSingle_price());
+        productReceived.setName(productFound.getName());
 
-        if( shoppingCart != null && productFound != null && products != null ) {
+        products.add(productReceived);
 
-            //the productDTO will already have the ID and quantity
-            //it's missing the individual price and name, so I'm setting these attributes
-            productDTO.setSingle_price( productFound.getSingle_price() );
-            productDTO.setName( productFound.getName() );
+        shoppingCart.setProducts(products);
 
-            //add
-            products.add( productDTO );
-            shoppingCart.setProducts(products);
+        shoppingCart = this.actualizeTotalPrice(shoppingCart);
 
-            //actualize the total price of the products
-            shoppingCart = this.actualizeTotalPrice(shoppingCart); //<-- se rompe aca
+        iShoppingCartRepository.save(shoppingCart);
+        return "The product was saved successfully";
 
-            //save
-            iShoppingCartRepository.save(shoppingCart);
-            return "The product was saved successfully";
+    }
+
+    private String ifProductIsInTheShoppingCart(ProductDTO productReceived, ShoppingCart shoppingCart) {
+
+        List<ProductDTO> products = this.accumulateQuantityToTake(productReceived, shoppingCart);
+
+        shoppingCart.setProducts(products);
+
+        shoppingCart = this.actualizeTotalPrice(shoppingCart);
+
+        iShoppingCartRepository.save(shoppingCart);
+
+        return "The product was saved successfully";
+    }
+
+    private List<ProductDTO> accumulateQuantityToTake(ProductDTO productReceived, ShoppingCart shoppingCart) {
+
+        List<ProductDTO> products = shoppingCart.getProducts();
+        for ( ProductDTO productInShoppingCart : products ) {
+
+            if( productInShoppingCart.getCode().equals( productReceived.getCode() ) ) {
+
+                Integer quantity = productInShoppingCart.getQuantity();
+                quantity += productReceived.getQuantity();
+                productInShoppingCart.setQuantity( quantity );
+            }
         }
-        return "The shopping cart does not exist, the id it's wrong or the product does not exist";
+        return products;
+    }
+
+    private boolean isThisProductInTheShoppingCart(ProductDTO productDTO, ShoppingCart shoppingCart) {
+
+        List<ProductDTO> products = shoppingCart.getProducts();
+        for ( ProductDTO productShoppingCart : products ) {
+
+            if (productShoppingCart.getCode().equals(productDTO.getCode())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public String fallbackAddProductToShoppingCart(Throwable throwable) {
