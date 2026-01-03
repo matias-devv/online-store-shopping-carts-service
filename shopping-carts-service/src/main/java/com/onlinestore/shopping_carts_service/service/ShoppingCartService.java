@@ -158,7 +158,6 @@ public class ShoppingCartService implements IShoppingCartService {
                     iShoppingCartRepository.save(shoppingCart);
                     return "The product from the shopping cart has been deleted";
                 }
-                return "That product does not exist in the shopping cart";
         }
         return "The product code was not found in the product list";
     }
