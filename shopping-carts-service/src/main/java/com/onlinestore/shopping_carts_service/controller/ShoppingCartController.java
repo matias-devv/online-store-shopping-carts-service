@@ -26,9 +26,9 @@ public class ShoppingCartController {
         return iShoppingCartService.deleteProductFromShoppingCart(code_product, shopping_cart_id);
     }
 
-    @PostMapping("/add-product/{id_shopping_cart}")
-    public String addProductToShoppingCart(@RequestBody ProductDTO productDTO, @PathVariable Long shopping_cart_id){
-        return iShoppingCartService.addProductToShoppingCart(productDTO, shopping_cart_id);
+    @PutMapping("/add/{id_shopping_cart}")
+    public String addProductToShoppingCart(@RequestBody ProductDTO productDTO, @PathVariable Long id_shopping_cart){
+        return iShoppingCartService.addProductToShoppingCart(productDTO, id_shopping_cart);
     }
 
     @GetMapping("/find/{id_shopping_cart}")

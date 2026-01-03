@@ -56,9 +56,23 @@ public class ShoppingCartService implements IShoppingCartService {
 
         UserDTO userDTO = iUserAPI.findByUserId( shoppingCart.getId_user() );
         if( userDTO != null ) {
+
             //the user will have a list of shopping cart IDs, they may already have IDs loaded or not
             //I'm adding this one I just created to their list.
-            userDTO.getIds_shopping_cart().add(shoppingCart.getId_shopping_cart());
+            List<Long> shoppingCartsOfUser = userDTO.getIds_shopping_cart();
+
+            if( shoppingCartsOfUser != null ) {
+                shoppingCartsOfUser.add( shoppingCart.getId_shopping_cart() );
+            }
+            else{
+                // If the user doesn't have a list of shopping cart IDs,
+                // I create a list, add the ID of this shopping cart, and set that for the user.
+                List<Long> shoppinCarts = new ArrayList<>();
+
+                shoppinCarts.add( shoppingCart.getId_shopping_cart() );
+
+                userDTO.setIds_shopping_cart( shoppinCarts );
+            }
             //update
             iUserAPI.updateUser(userDTO);
         }
@@ -90,7 +104,7 @@ public class ShoppingCartService implements IShoppingCartService {
         //I grab the entity's product list
         List<ProductDTO> listToReturn = shoppingCart.getProducts();
 
-        if( listToReturn == null && productsFromAPI == null ) {
+        if( listToReturn == null || productsFromAPI == null ) {
             return null;
         }
 
@@ -154,24 +168,29 @@ public class ShoppingCartService implements IShoppingCartService {
     @Retry(name="products-service")
     public String addProductToShoppingCart(ProductDTO productDTO, Long shopping_cart_id) {
 
+
         //I'm looking for the shopping cart and the product to add
         ShoppingCart shoppingCart = iShoppingCartRepository.findById(shopping_cart_id).orElse(null);
 
-        ProductDTO productFound = iProductAPI.findProductByCode(productDTO.getCode());
+        //Get the list of products of this shopping cart
+        List<ProductDTO> products = shoppingCart.getProducts();
 
+        //The product to add
+        ProductDTO productFound = iProductAPI.findProductByCode( productDTO.getCode() );
 
-        if( shoppingCart != null && productFound != null ) {
+        if( shoppingCart != null && productFound != null && products != null ) {
 
             //the productDTO will already have the ID and quantity
             //it's missing the individual price and name, so I'm setting these attributes
-            productDTO.setSingle_price(productFound.getSingle_price());
-            productDTO.setName(productFound.getName());
+            productDTO.setSingle_price( productFound.getSingle_price() );
+            productDTO.setName( productFound.getName() );
 
             //add
-            shoppingCart.getProducts().add(productDTO);
+            products.add( productDTO );
+            shoppingCart.setProducts(products);
 
             //actualize the total price of the products
-            shoppingCart = this.actualizeTotalPrice(shoppingCart);
+            shoppingCart = this.actualizeTotalPrice(shoppingCart); //<-- se rompe aca
 
             //save
             iShoppingCartRepository.save(shoppingCart);
@@ -187,7 +206,9 @@ public class ShoppingCartService implements IShoppingCartService {
     private ShoppingCart actualizeTotalPrice(ShoppingCart shoppingCart) {
 
         List<ProductDTO> products =  shoppingCart.getProducts();
+
         BigDecimal totalPrice = BigDecimal.ZERO;
+        shoppingCart.setTotal_price(BigDecimal.ZERO);
 
         if(products == null) {
             return null;
@@ -201,6 +222,7 @@ public class ShoppingCartService implements IShoppingCartService {
         }
 
         shoppingCart.setTotal_price(totalPrice);
+
         return shoppingCart;
     }
 

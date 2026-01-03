@@ -18,5 +18,5 @@ public class ProductDTO {
     private Long code;
     private String name;
     private BigDecimal single_price;
-    private int quantity;
+    private Integer quantity;
 }
