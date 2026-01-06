@@ -45,6 +45,8 @@ This service was intentionally designed to **avoid inconsistent carts**, even in
 
 - Assign products to a cart using **product code + quantity only**
 
+- Delete products from a shopping cart
+
 
 - Automatically calculate and update the total cart price
 
@@ -74,41 +76,36 @@ This service was intentionally designed to **avoid inconsistent carts**, even in
 ## 🔄 Business Flow (How It Works)
 1. A request to create a shopping cart is received with:
 
+   *  ```id_user```
 
-- ```id_user```
-
-
-- List of products (```code + quantity```)
+   *  List of products (```code + quantity```)
 
 
-2. The service validates that the user exists (```users-service```)
+3. The service validates that the user exists (```users-service```)
 
 
-3. Product details (```name, single_price```) are fetched from ```products-service```
+4. Product details (```name, single_price```) are fetched from ```products-service```
 
 
-4. The cart:
+5. The cart:
+    * Accumulates quantities if a product already exists
+    
+    * Adds new products if they were not previously present
+      
+    * Delete products via ```shopping-cart-id``` & ```code```
 
 
-- Accumulates quantities if a product already exists
+6. ```total_price``` is calculated and updated internally
 
 
-- Adds new products if they were not previously present
+7. The shopping cart ID is associated with the user
 
 
-5. ```total_price``` is calculated and updated internally
-
-
-6. The shopping cart ID is associated with the user
-
-
-7. If a dependent service is unavailable:
-
-
-- The operation fails safely
-
-
-- No inconsistent cart is persisted
+8. If a dependent service is unavailable:
+    
+    * The operation fails safely
+    
+    * No inconsistent cart is persisted
 
 
 
