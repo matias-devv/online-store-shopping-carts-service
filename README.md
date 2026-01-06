@@ -307,7 +307,7 @@ Useful for development, testing, or isolated execution.
 Once the service is running, Swagger UI is available at:
 
 ```
-http://localhost:8084/swagger-ui.html
+http://localhost:8085/swagger-ui.html
 ```
 
 All endpoints, request/response schemas, and examples are generated automatically via Springdoc OpenAPI.
